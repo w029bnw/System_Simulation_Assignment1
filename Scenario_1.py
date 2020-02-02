@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Assignment 1: Restaurant Drive-Thru
+
+Authors: David Inman and Brittany Woods
+Date: 13 February 2020
+
 """
 
 import random
@@ -16,8 +20,8 @@ mean_interarrival_time = 2.0 #Generate new customers roughly every x minutes
 mean_prep_time = 5.0 #minutes
 mean_order_time = 2.0 #minutes
 mean_pay_time = 2.0 #minutes
-operating_timespan = 60.0 * 6.0 #minutes - We'll also check 2 hours before/after lunch
-
+operating_timespan = 60.0 * 0.20 #6.0 #minutes - We'll also check 2 hours before/after lunch
+ 
 def customer_generator(env, stations, mean_interarrival_time, operating_timespan):
     i = 0
     while (env.now <= operating_timespan):
@@ -47,7 +51,44 @@ def customer(env, name, stations, mean_order_time):
     if(station_1_waiting_to_order_count < balk_limit or station_2_waiting_to_order_count < balk_limit):
         
         # Check which line is shortest and get in that line
-        if(station_1_waiting_to_order_count <= station_2_waiting_to_order_count):
+        if(stations[0].count == 0):
+            req = stations[0].request()
+            
+            yield req
+        
+            wait_time = env.now - arrival_time
+        
+            # Arrived at an ordering station
+            print('%7.4f %s arrived at Station 1 and waited %6.3f' % (env.now, name, wait_time))
+            order_time = random.expovariate(1.0 / mean_order_time)
+            print('%7.4f %s: service time %6.3f' % (env.now, name, order_time))
+        
+            yield env.timeout(order_time)
+        
+            # Release the station
+            stations[0].release(req)
+            print('%7.4f %s: Finished ordering and left Station 1' % (env.now, name))
+            
+        elif(stations[1].count == 0):
+            req = stations[1].request()  
+            
+            yield req
+        
+            wait_time = env.now - arrival_time
+        
+            # Arrived at an ordering station
+            print('%7.4f %s arrived at Station 2 and waited %6.3f' % (env.now, name, wait_time))
+            order_time = random.expovariate(1.0 / mean_order_time)
+            print('%7.4f %s: service time %6.3f' % (env.now, name, order_time))
+        
+            yield env.timeout(order_time)
+        
+            # Release the station
+            stations[1].release(req)
+            end_order_time = env.now
+            print('%7.4f %s: Finished ordering and left Station 2' % (end_order_time, name))
+            
+        elif(station_1_waiting_to_order_count <= station_2_waiting_to_order_count):
             req = stations[0].request()
             
             yield req
@@ -81,13 +122,51 @@ def customer(env, name, stations, mean_order_time):
         
             # Release the station
             stations[1].release(req)
-            print('%7.4f %s: Finished ordering and left Station 2' % (env.now, name))
+            end_order_time = env.now
+            print('%7.4f %s: Finished ordering and left Station 2' % (end_order_time, name))
     
     else:
         print('%7.4f %s: Balked' % (env.now, name)) 
+        
+    
+    # Receiving Order
+    pickup_line_count = waiting_line.count
+    print("%4d are waiting in line for their orders" % (pickup_line_count))
+    
+    if(pickup_line_count < max_number_of_customers_ready_pickup):
+        req = waiting_line.request()
+        
+        yield req
+        
+        # Entered pick-up line
+        arrival_time = env.now
+        print("%7.4f : %s entered the pick-up line" % (arrival_time, name))
+        
+        if(len(window.queue) < 1):
+            # Release spot in the pick-up line and move to pay window
+            waiting_line.release(req)
+            
+            req = window.request()
+            
+            yield req
+            
+            wait_time = env.now - arrival_time
+            
+            print("%7.4f %s arrived at the pick-up window and waited %6.3f" % (env.now, name, wait_time))
+        
+            pay_time = random.expovariate(1.0 / mean_pay_time)
+            print("%7.4f %s: pay time %6.3f" % (env.now, name, pay_time))
+            
+            yield env.timeout(pay_time)
+            
+            # Release the window
+            window.release(req)
+            end_pay_time = env.now
+            print("%7.4f %s: Finished paying and left the drive-thru" % (end_pay_time, name))
+            
 
 # Setup and start the simulation
-print("Assignment 1: Two Service Stations")
+print("Scenario 1: Two Service Stations")
 random.seed(random_seed)
 env = simpy.Environment() #Starts at t=0
 
@@ -95,6 +174,7 @@ env = simpy.Environment() #Starts at t=0
 station_1 = simpy.Resource(env, 1)
 station_2 = simpy.Resource(env, 1)
 stations = [station_1, station_2]
+waiting_line = simpy.Resource(env, max_number_of_customers_ready_pickup)
 window = simpy.Resource(env, capacity=number_of_pickup_windows)
 env.process(customer_generator(env, stations, mean_interarrival_time, operating_timespan))
 env.run() 
