@@ -1,0 +1,49 @@
+# Events
+
+SimPy includes an extensive set of event types for various purposes. All of them inherit simpy.events.Event
+
+hierarchy of events:
+	events.Event
+	|
+	+— events.Timeout
+	|
+	+— events.Initialize
+	|
+	+— events.Process
+	|
+	+— events.Condition
+	|  |
+	|  +— events.AllOf
+	|  |
+	|  +— events.AnyOf
+	
+Events are extensible and resources, for example, define additional events.  specific focus for now will be on simpy.events
+
+Basics
+	events are very similar if not identical to deferreds, futures or promises.  instances of the class Event are used to describe any kind of events.  Events can be in one of the following stats.  An event
+		might happen (not triggered)
+		is going to happen (triggered) or 
+		has happened (processed)
+		
+	They traverse these states one in that order.  Events are also tightly bound to time and time causes events to advance their state.
+	Initially events are not triggered but just objects in memory
+	If an even is triggered it is scheduled at a given time and inserted into SimPy's event queue.  the property Event.triggered becomes True.
+	As long as an event is not processed you can add callbacks to it.  
+		Callbacks are callables that accept an event as parameter and are storied in the Event.callbacks list
+		Processed means SimPy pops it from the event queue and calls all its callbacks.  It is no longer possible to add callbacks at this point.  Event.processed become True
+	Events also have a value.  value can be set before or when the event is triggered and can be retrieved via Event.value or within a process by yielding the event (value = yield event)
+	
+	Adding callbacks
+		The most common way to add a callback to an event is yielding it from your process function (yield event) this will add the process' _resumed() method as a callback.  That is how your process gets resumed when it yielded an event
+		However, you can add any callable object (function) to the list of callbacks as long as it accepts an event instance as its single parameter:
+		#code example of added callables
+	
+	Let time pass by: the Timeout
+		to let time pass in the simulation, there is the timeout event.  Timeout has two params: a delay and an optional value: Timeout(delay, value=None)
+		This is triggered during its creation and schedules inself at now + delay. 
+			suceed and fail cannot be called again and you have to pass the event value to it whe you create the timeout.
+			
+	Processes are events, too
+		SimPy processes hagve the nice property of also being events
+		That means a process can yield another process, it will resume when the other process ends.  the events value will be the return value of that process
+		
