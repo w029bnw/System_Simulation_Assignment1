@@ -45,8 +45,8 @@ class Floater:
 
 
 #console input for test
-floater = Floater(env)
-env.run()
+#floater = Floater(env)
+#env.run()
 """
 As of now self.take_payment is raising a value error for  %
 Working on fix at the moment.
@@ -56,3 +56,54 @@ Working on fix at the moment.
 # If Balking Limit reached call floater
 # While balking >= 5 call floater
 # 
+# -*- coding: utf-8 -*-
+
+randseed = 125346
+close_time = 50
+
+def Arrival(env, delayTime, res):
+  itemNo = 1
+  workTime = 3
+  while (env.now <= close_time):
+    print ("Arrvial occurs at time %5.3f" % (env.now))
+    env.process(Unit(env, itemNo, workTime, res))
+    itemNo += 1
+    yield env.timeout(delayTime)
+    
+def Unit(env, itemNo, workTime, res):
+  r1 = res[0].request()
+  print ("Order %d taken from line 1 at time %5.3f" % (itemNo, env.now))
+  yield r1
+ 
+  print ("Order %d picked up from window at time %5.3f" % (itemNo, env.now))
+  yield env.timeout(workTime)
+  
+  r2 = res[1].request()
+  print("Order %d taken from line 2 at time %5.3f" % (itemNo, env.now))
+  yield r2
+  # 
+  
+  res[0].release(r1)
+  print("Line 1 is now taking new orders" )
+	
+  print("Order %d picked up from window at time %5.3f" % (itemNo, env.now))
+  yield env.timeout(workTime)
+  # print("Order %d )
+  res[1].release(r2)
+  print ("Line 2 s now taking new orders")
+  
+  
+random.seed(randseed)
+
+env = simpy.Environment()
+res1 = simpy.Resource(env, 1)
+res2 = simpy.Resource(env, 1)
+res = [res1, res2]
+env.process(Arrival(env, 5.0, res))
+
+
+env.run()
+
+
+
+
