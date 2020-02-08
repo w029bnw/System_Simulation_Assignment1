@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Assignment 1: Restaurant Drive-Thru
-
 Authors: David Inman and Brittany Woods
 Date: 13 February 2020
-
 """
 
 import random
@@ -13,10 +11,9 @@ import simpy
 random_seed = 12345
 number_of_stations = 2
 number_of_pickup_windows = 1
+max_number_of_pickup_window_spots = 6
 max_number_of_customers_ready_to_order = 10
-max_number_of_customers_ready_pickup = 6
-number_of_customers = 100 # total number of customers
-mean_interarrival_time = 2.0 #Generate new customers roughly every x minutes
+mean_interarrival_time = 1.0 #Generate new customers roughly every x minutes
 mean_prep_time = 5.0 #minutes
 mean_order_time = 2.0 #minutes
 mean_pay_time = 2.0 #minutes
@@ -128,42 +125,30 @@ def customer(env, name, stations, mean_order_time):
     else:
         print('%7.4f %s: Balked' % (env.now, name)) 
         
-    
     # Receiving Order
-    pickup_line_count = waiting_line.count
-    print("%4d are waiting in line for their orders" % (pickup_line_count))
+    arrival_time = env.now
     
-    if(pickup_line_count < max_number_of_customers_ready_pickup):
-        req = waiting_line.request()
+    pickup_line_count = window.count
+    pickup_line_waiting_count = len(window.queue)
+    
+    print("Window: paying: %4d waiting: %4d" % (pickup_line_count, pickup_line_waiting_count))
+    
+    if(pickup_line_waiting_count < max_number_of_pickup_window_spots):
+        req = window.request()
         
         yield req
         
-        # Entered pick-up line
-        arrival_time = env.now
-        print("%7.4f : %s entered the pick-up line" % (arrival_time, name))
+        wait_time = env.now - arrival_time
         
-        if(len(window.queue) < 1):
-            # Release spot in the pick-up line and move to pay window
-            waiting_line.release(req)
-            
-            req = window.request()
-            
-            yield req
-            
-            wait_time = env.now - arrival_time
-            
-            print("%7.4f %s arrived at the pick-up window and waited %6.3f" % (env.now, name, wait_time))
+        print("%7.4f %s arrived at pick-up window and waited %6.3f" % (env.now, name, wait_time))
         
-            pay_time = random.expovariate(1.0 / mean_pay_time)
-            print("%7.4f %s: pay time %6.3f" % (env.now, name, pay_time))
-            
-            yield env.timeout(pay_time)
-            
-            # Release the window
-            window.release(req)
-            end_pay_time = env.now
-            print("%7.4f %s: Finished paying and left the drive-thru" % (end_pay_time, name))
-            
+        pay_time = random.expovariate(1.0 / mean_pay_time)
+        print("%7.4f %s: pay time %6.3f" % (env.now, name, pay_time))
+        
+        yield env.timeout(pay_time)
+        
+        window.release(req)
+        print("%7.4f %s: Finished paying and has left the window" % (env.now, name))
 
 # Setup and start the simulation
 print("Scenario 1: Two Service Stations")
@@ -174,9 +159,6 @@ env = simpy.Environment() #Starts at t=0
 station_1 = simpy.Resource(env, 1)
 station_2 = simpy.Resource(env, 1)
 stations = [station_1, station_2]
-waiting_line = simpy.Resource(env, max_number_of_customers_ready_pickup)
-window = simpy.Resource(env, capacity=number_of_pickup_windows)
+window = simpy.Resource(env, capacity=1)
 env.process(customer_generator(env, stations, mean_interarrival_time, operating_timespan))
 env.run() 
-	
-
