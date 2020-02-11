@@ -9,11 +9,11 @@ Date: 13 February 2020
 import random
 import simpy
 
-RANDOM_SEED = 123245
+RANDOM_SEED = 1
 NUM_STATIONS = 2
 NUM_WAIT_SPOTS = 6
 BALK_LIMIT = 10 / NUM_STATIONS
-ARRIVAL_TIME = 0.75
+ARRIVAL_TIME = 1.0
 ORDER_TIME = 2.0
 PREP_TIME = 5.0
 PAY_TIME = 2.0
@@ -73,27 +73,26 @@ def customer(env, name, drive_thru):
         if(drive_thru.station1.count == 0 or (len(drive_thru.station1.queue) <= len(drive_thru.station2.queue) and (drive_thru.station1.count == 1 and drive_thru.station2.count == 1))):
             request = drive_thru.station1.request()
             yield request
-                
+            f.write('%4d, %4d\n' % (len(drive_thru.station1.queue), len(drive_thru.station2.queue)))    
             f.write('%7.4f: %s places their order at station 1.\n' % (env.now, name))
             yield env.process(drive_thru.order(name, random.expovariate(1.0 / ORDER_TIME)))
                 
             f.write('%7.4f: %s has finished ordering at station 1.\n' % (env.now, name))
                 
-            # Prep the food order
             req1 =  drive_thru.cook.request()
-            yield req1
+            req2 = drive_thru.line.request()
+            yield req1 & req2
             
             f.write("%7.4f: %s's order has been received.\n" % (env.now, name))
-            yield env.process(drive_thru.prep(name, random.expovariate(1.0 / PREP_TIME)))  
-            drive_thru.cook.release(req1)
             
             # Move to the pick-up line if there is room
-            req2 = drive_thru.line.request()
-            yield req2
             f.write("%4d\n" % drive_thru.line.count)
-        
             f.write("%7.4f: %s moves to the pick-up line.\n" % (env.now, name))
             drive_thru.station1.release(request)
+            
+            # Prep the food order
+            yield env.process(drive_thru.prep(name, random.expovariate(1.0 / PREP_TIME)))  
+            drive_thru.cook.release(req1)
             
             # Queue to the check-out window
             req3 = drive_thru.window.request()
@@ -110,27 +109,26 @@ def customer(env, name, drive_thru):
         else:
             request = drive_thru.station2.request()
             yield request
-            
+            f.write('%4d, %4d\n' % (len(drive_thru.station1.queue), len(drive_thru.station2.queue))) 
             f.write('%7.4f: %s places their order at station 2.\n' % (env.now, name))
             yield env.process(drive_thru.order(name, random.expovariate(1.0 / ORDER_TIME)))
             
             f.write('%7.4f: %s has finished ordering at station 2.\n' % (env.now, name))
                 
-            # Prep the food order
             req1 =  drive_thru.cook.request()
-            yield req1
+            req2 = drive_thru.line.request()
+            yield req1 & req2
             
             f.write("%7.4f: %s's order has been received.\n" % (env.now, name))
-            yield env.process(drive_thru.prep(name, random.expovariate(1.0 / PREP_TIME))) 
-            drive_thru.cook.release(req1)
             
             # Move to the pick-up line if there is room
-            req2 = drive_thru.line.request()
-            yield req2
             f.write("%4d\n" % drive_thru.line.count)
-        
             f.write("%7.4f: %s moves to the pick-up line.\n" % (env.now, name))
             drive_thru.station2.release(request)
+            
+            # Prep the food order
+            yield env.process(drive_thru.prep(name, random.expovariate(1.0 / PREP_TIME)))  
+            drive_thru.cook.release(req1)
             
             # Queue to the check-out window
             req3 = drive_thru.window.request()
