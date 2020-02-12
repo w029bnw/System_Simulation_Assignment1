@@ -67,13 +67,14 @@ def customer(env, name, drive_thru):
     f.write("%7.4f: %s has arrived at the Drive-Thru.\n" % (env.now, name))
     
     # Decides whether to enter the drive-thru line
-    if(len(drive_thru.station1.queue) < BALK_LIMIT or len(drive_thru.station2.queue) < BALK_LIMIT):
+    # Balk_limit-1 because 1 of the 5 spots for each lane is the active customer
+    # using the resource
+    if(len(drive_thru.station1.queue) < BALK_LIMIT-1 or len(drive_thru.station2.queue) < BALK_LIMIT-1):
         
         # Decides which station line to enter
         if(drive_thru.station1.count == 0 or (len(drive_thru.station1.queue) <= len(drive_thru.station2.queue) and (drive_thru.station1.count == 1 and drive_thru.station2.count == 1))):
             request = drive_thru.station1.request()
-            yield request
-            f.write('%4d, %4d\n' % (len(drive_thru.station1.queue), len(drive_thru.station2.queue)))    
+            yield request  
             f.write('%7.4f: %s places their order at station 1.\n' % (env.now, name))
             yield env.process(drive_thru.order(name, random.expovariate(1.0 / ORDER_TIME)))
                 
@@ -86,7 +87,6 @@ def customer(env, name, drive_thru):
             f.write("%7.4f: %s's order has been received.\n" % (env.now, name))
             
             # Move to the pick-up line if there is room
-            f.write("%4d\n" % drive_thru.line.count)
             f.write("%7.4f: %s moves to the pick-up line.\n" % (env.now, name))
             drive_thru.station1.release(request)
             
@@ -109,7 +109,6 @@ def customer(env, name, drive_thru):
         else:
             request = drive_thru.station2.request()
             yield request
-            f.write('%4d, %4d\n' % (len(drive_thru.station1.queue), len(drive_thru.station2.queue))) 
             f.write('%7.4f: %s places their order at station 2.\n' % (env.now, name))
             yield env.process(drive_thru.order(name, random.expovariate(1.0 / ORDER_TIME)))
             
@@ -122,7 +121,6 @@ def customer(env, name, drive_thru):
             f.write("%7.4f: %s's order has been received.\n" % (env.now, name))
             
             # Move to the pick-up line if there is room
-            f.write("%4d\n" % drive_thru.line.count)
             f.write("%7.4f: %s moves to the pick-up line.\n" % (env.now, name))
             drive_thru.station2.release(request)
             
