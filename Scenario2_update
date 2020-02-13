@@ -27,7 +27,15 @@ PICKUP_TIME = 1.5
 NUM_SERVED = 0.0
 TOTAL_BALKED = []
 TOTAL_SERVED = []
-
+VAR_LIST = [["Random Seed", RANDOM_SEED],
+            ["Number of Stations", NUM_STATIONS],
+            ["Number of Spots", NUM_WAIT_SPOTS],
+            ["Balking Limit", BALK_LIMIT],
+            ["Arrival Rate (minutes)", ARRIVAL_TIME],
+            ["Preperation Food Rate (minutes)", PREP_TIME],
+            ["Simulation Time", SIM_TIME],
+            ["Floater Interaction Time (minutes)", ORDER_PAY_TIME],
+            ["Pickup Window Rate (minutes)", PICKUP_TIME]]
 
 class DriveThru(object):
     
@@ -196,14 +204,19 @@ total_cust = served + balked
 
 f.write("Total customers served in Scenario: %d\n" % served)
 
-
+# Print Table of Variables Used
+f.write("| Variable | Value ")
+for item in VAR_LIST:
+    f.write("|", item[0], "|", item[1])
+    
 # Graph to display values from Scenario
 data = [served, balked, total_cust]
 x = np.arange(3)
 fig, ax = plt.subplots()
 plt.bar(x, data)
 plt.xticks(x, ('Served', 'Balked', 'Total Customers'))
-plt.show()
+plt.title("Scenario 2 Collected Data")
+plt.ylabel("Customers")
 plt.savefig('bar_chart.pdf')
 
 f.close()
