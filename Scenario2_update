@@ -216,7 +216,7 @@ fig, ax = plt.subplots()
 plt.bar(x, data, color= ['blue', 'red', 'purple'])
 plt.xticks(x, ('Served', 'Balked', 'Total Customers'))
 plt.title("Scenario 2 Collected Data")
-plt.ylabel("Customers")
+plt.ylabel("# of Customers")
 plt.savefig('bar_chart.pdf')
 
 f.close()
