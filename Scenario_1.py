@@ -8,6 +8,8 @@ Date: 13 February 2020
 
 import random
 import simpy
+import Matplotlib.pyplot as plt
+import numpy as np
 
 RANDOM_SEED = 1
 NUM_STATIONS = 2
@@ -18,6 +20,21 @@ ORDER_TIME = 2.0
 PREP_TIME = 5.0
 PAY_TIME = 2.0
 SIM_TIME = 60.0 * 6.0
+
+
+NUM_SERVED = 0.0
+TOTAL_BALKED = []
+TOTAL_SERVED = []
+VAR_LIST = [["Random Seed", RANDOM_SEED],
+            ["Number of Stations", NUM_STATIONS],
+            ["Number of Spots", NUM_WAIT_SPOTS],
+            ["Balking Limit", BALK_LIMIT],
+            ["Arrival Rate (minutes)", ARRIVAL_TIME],
+            ["Preperation Food Rate (minutes)", PREP_TIME],
+            ["Simulation Time (minutes)", SIM_TIME],
+            ["Order Station Time (minutes)", ORDER_PAY_TIME],
+            ["Pickup Window Rate (minutes)", PAY_TIME]]
+
 
 class DriveThru(object):
     """A Drive-Thru has 2 order stations and 1 pick-up window to take and 
@@ -105,6 +122,8 @@ def customer(env, name, drive_thru):
             yield env.process(drive_thru.pay(name, random.expovariate(1.0 / PAY_TIME)))
             drive_thru.window.release(req3)
 
+            # Stat counter update
+            TOTAL_SERVED.append(name)
                 
         else:
             request = drive_thru.station2.request()
@@ -138,9 +157,15 @@ def customer(env, name, drive_thru):
             # Pay and leave
             yield env.process(drive_thru.pay(name, random.expovariate(1.0 / PAY_TIME)))
             drive_thru.window.release(req3)
+            
+            # Stat Counter update
+            TOTAL_SERVED.append(name)
         
     else:
         f.write('%s balked.\n' % (name))
+        
+        # Balked Counter update
+        TOTAL_BALKED.append(name)
         
             
 def setup(env):
@@ -166,4 +191,36 @@ env.process(setup(env))
 
 # Execute!
 env.run()
+
+# Sum Results for balked customers to the output file
+balked = 0
+for name in TOTAL_BALKED:
+    balked += 1
+f.write("Total customers balked in Scenario: %d\n" % balked)
+
+# Sum Results for served customers to output file
+served = 0
+for name in TOTAL_SERVED:
+    served += 1
+total_cust = served + balked
+f.write("Total customers served in Scenario: %d\n" % served)
+
+
+# Print Table of Variables Used
+f.write("\n\n| Variable | Value\n")
+for item in VAR_LIST:
+    f.write("| %s | %d \n" % (item[0], item[1]))
+
+
+# Graphic to display values from Scenario bar chart
+data = [served, balked, total_cust]
+x = np.arange(3)
+fig, ax = plt.subplots()
+plt.bar(x, data, color=['blue', 'red', 'purple'])
+plt.xticks(x, ('Served', 'Balked', 'Total Customers'))
+plt.title("Scenario 2 Collected Data")
+plt.ylabel("# of Customers")
+plt.savefig('bar_chart.pdf')
+
+# Close file and exit
 f.close()
