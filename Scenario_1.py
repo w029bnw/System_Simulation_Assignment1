@@ -1,164 +1,239 @@
 # -*- coding: utf-8 -*-
 """
 Assignment 1: Restaurant Drive-Thru
+Scenario 1: Dual Order Station Drive-Thru
 Authors: David Inman and Brittany Woods
 Date: 13 February 2020
 """
 
 import random
 import simpy
+import matplotlib.pyplot as plt
+import numpy as np
 
-random_seed = 12345
-number_of_stations = 2
-number_of_pickup_windows = 1
-max_number_of_pickup_window_spots = 6
-max_number_of_customers_ready_to_order = 10
-mean_interarrival_time = 1.0 #Generate new customers roughly every x minutes
-mean_prep_time = 5.0 #minutes
-mean_order_time = 2.0 #minutes
-mean_pay_time = 2.0 #minutes
-operating_timespan = 60.0 * 0.20 #6.0 #minutes - We'll also check 2 hours before/after lunch
- 
-def customer_generator(env, stations, mean_interarrival_time, operating_timespan):
+RANDOM_SEED = 1
+NUM_STATIONS = 2
+NUM_WAIT_SPOTS = 6
+BALK_LIMIT = 10 / NUM_STATIONS
+ARRIVAL_TIME = 1.0
+ORDER_TIME = 2.0
+PREP_TIME = 5.0
+PAY_TIME = 2.0
+SIM_TIME = 60.0 * 12.0
+
+NUM_SERVED = 0.0
+TOTAL_BALKED = []
+TOTAL_SERVED = []
+VAR_LIST = [["Random Seed", RANDOM_SEED],
+            ["Number of Stations", NUM_STATIONS],
+            ["Number of Spots", NUM_WAIT_SPOTS],
+            ["Balking Limit", BALK_LIMIT],
+            ["Arrival Rate (minutes)", ARRIVAL_TIME],
+            ["Preperation Food Rate (minutes)", PREP_TIME],
+            ["Simulation Time (minutes)", SIM_TIME],
+            ["Pickup Window Rate (minutes)", PAY_TIME]]
+
+
+NUM_SERVED = 0.0
+TOTAL_BALKED = []
+TOTAL_SERVED = []
+VAR_LIST = [["Random Seed", RANDOM_SEED],
+            ["Number of Stations", NUM_STATIONS],
+            ["Number of Spots", NUM_WAIT_SPOTS],
+            ["Balking Limit", BALK_LIMIT],
+            ["Arrival Rate (minutes)", ARRIVAL_TIME],
+            ["Preperation Food Rate (minutes)", PREP_TIME],
+            ["Simulation Time (minutes)", SIM_TIME],
+            ["Order Station Time (minutes)", ORDER_PAY_TIME],
+            ["Pickup Window Rate (minutes)", PAY_TIME]]
+
+
+class DriveThru(object):
+    """A Drive-Thru has 2 order stations and 1 pick-up window to take and
+    deliver customer orders.
+
+    Customers have to request an order station. Once they get one, they will
+    give their orders and the Drive-Thru will automatically begin preparing
+    it in parallel as the customer requests a spot at the pay window. Once
+    the customer has reached the pay window and their food is ready, they will
+    pay and leave the Drive-Thru forever.
+
+    """
+    def __init__(self, env):
+        self.env = env
+        self.station1 = simpy.Resource(env, 1)
+        self.station2 = simpy.Resource(env, 1)
+        self.window = simpy.Resource(env, 1)
+        self.line = simpy.Resource(env, NUM_WAIT_SPOTS)
+        self.cook = simpy.Resource(env, 1)
+
+    def order(self, name, order_t):
+        """The order processes. It takes a ``customer`` processes and takes
+        their order."""
+        yield self.env.timeout(order_t)
+
+    def prep(self, name, prep_t):
+        """The prep processes. It processes the previously placed order."""
+        yield self.env.timeout(prep_t)
+        f.write("%7.4f: %s's order is ready for pick-up.\n" % (self.env.now, name))
+
+    def pay(self, name, pay_t):
+        """The pay processes. It takes a ``customer`` processes and gives
+        their order."""
+        yield self.env.timeout(pay_t)
+        f.write("%7.4f: %s has paid for their order and left the drive-thru.\n" % (self.env.now, name))
+
+def customer(env, name, drive_thru):
+    """The customer precess (each customer has a ``name``) arrives at the
+    drive-thru(``drive_thru``) and requests a service station.
+
+    The customer then waits for their order to complete, approaches the window,
+    pays for their order, and then leaves the drive-thru forever.
+
+    """
+
+    # Arrives at drive-thru
+    f.write("%7.4f: %s has arrived at the Drive-Thru.\n" % (env.now, name))
+
+    # Decides whether to enter the drive-thru line
+    # Balk_limit-1 because 1 of the 5 spots for each lane is the active customer
+    # using the resource
+    if(len(drive_thru.station1.queue) < BALK_LIMIT-1 or len(drive_thru.station2.queue) < BALK_LIMIT-1):
+
+        # Decides which station line to enter
+        if(drive_thru.station1.count == 0 or (len(drive_thru.station1.queue) <= len(drive_thru.station2.queue) and (drive_thru.station1.count == 1 and drive_thru.station2.count == 1))):
+            request = drive_thru.station1.request()
+            yield request
+            f.write('%7.4f: %s places their order at station 1.\n' % (env.now, name))
+            yield env.process(drive_thru.order(name, random.expovariate(1.0 / ORDER_TIME)))
+
+            f.write('%7.4f: %s has finished ordering at station 1.\n' % (env.now, name))
+
+            req1 =  drive_thru.cook.request()
+            req2 = drive_thru.line.request()
+            yield req1 & req2
+
+            f.write("%7.4f: %s's order has been received.\n" % (env.now, name))
+
+            # Move to the pick-up line if there is room
+            f.write("%7.4f: %s moves to the pick-up line.\n" % (env.now, name))
+            drive_thru.station1.release(request)
+
+            # Prep the food order
+            yield env.process(drive_thru.prep(name, random.expovariate(1.0 / PREP_TIME)))
+            drive_thru.cook.release(req1)
+
+            # Queue to the check-out window
+            req3 = drive_thru.window.request()
+            yield req3
+
+            f.write("%7.4f: %s moves to the window.\n" % (env.now, name))
+            drive_thru.line.release(req2)
+
+            # Pay and leave
+            yield env.process(drive_thru.pay(name, random.expovariate(1.0 / PAY_TIME)))
+            drive_thru.window.release(req3)
+
+            # Stat counter update
+            TOTAL_SERVED.append(name)
+
+        else:
+            request = drive_thru.station2.request()
+            yield request
+            f.write('%7.4f: %s places their order at station 2.\n' % (env.now, name))
+            yield env.process(drive_thru.order(name, random.expovariate(1.0 / ORDER_TIME)))
+
+            f.write('%7.4f: %s has finished ordering at station 2.\n' % (env.now, name))
+
+            req1 =  drive_thru.cook.request()
+            req2 = drive_thru.line.request()
+            yield req1 & req2
+
+            f.write("%7.4f: %s's order has been received.\n" % (env.now, name))
+
+            # Move to the pick-up line if there is room
+            f.write("%7.4f: %s moves to the pick-up line.\n" % (env.now, name))
+            drive_thru.station2.release(request)
+
+            # Prep the food order
+            yield env.process(drive_thru.prep(name, random.expovariate(1.0 / PREP_TIME)))
+            drive_thru.cook.release(req1)
+
+            # Queue to the check-out window
+            req3 = drive_thru.window.request()
+            yield req3
+
+            f.write("%7.4f: %s moves to the window.\n" % (env.now, name))
+            drive_thru.line.release(req2)
+
+            # Pay and leave
+            yield env.process(drive_thru.pay(name, random.expovariate(1.0 / PAY_TIME)))
+            drive_thru.window.release(req3)
+
+            # Stat Counter update
+            TOTAL_SERVED.append(name)
+
+    else:
+        f.write('%s balked.\n' % (name))
+        TOTAL_BALKED.append(name)
+
+        # Balked Counter update
+        TOTAL_BALKED.append(name)
+
+
+def setup(env):
+    """Create the drive-thru and have cars arrive every ``t_iter`` minutes."""
+    # Create the drive-thru
+    drive_thru = DriveThru(env)
+
+    # Create more customers while the simulation is running
     i = 0
-    while (env.now <= operating_timespan):
-        c = customer(env,'Customer%02d' % i, stations, mean_order_time)
-        env.process(c)
-        interarrival_time = random.expovariate(1.0 / mean_interarrival_time)
-        yield env.timeout(interarrival_time)
+    while env.now < SIM_TIME:
+        env.process(customer(env, 'Customer%02d' % i, drive_thru))
+        yield env.timeout(random.expovariate(1.0 / ARRIVAL_TIME))
         i += 1
 
-def customer(env, name, stations, mean_order_time):
-    """
-    Customers arrive, order, the order is prepped, they pay, and then they leave.
-    """
-    arrival_time = env.now
-    print("%7.4f : %s has arrived." % (arrival_time, name))
-   
-    # Ordering
-    station_1_ordering_count = stations[0].count
-    station_2_ordering_count = stations[1].count
-    station_1_waiting_to_order_count = len(stations[0].queue)
-    station_2_waiting_to_order_count = len(stations[1].queue)
-    
-    print('Station 1: ordering: %4d waiting: %4d' % (station_1_ordering_count, station_1_waiting_to_order_count))
-    print('Station 2: ordering: %4d waiting: %4d' % (station_2_ordering_count, station_2_waiting_to_order_count))
-        
-    balk_limit = max_number_of_customers_ready_to_order / number_of_stations
-    if(station_1_waiting_to_order_count < balk_limit or station_2_waiting_to_order_count < balk_limit):
-        
-        # Check which line is shortest and get in that line
-        if(stations[0].count == 0):
-            req = stations[0].request()
-            
-            yield req
-        
-            wait_time = env.now - arrival_time
-        
-            # Arrived at an ordering station
-            print('%7.4f %s arrived at Station 1 and waited %6.3f' % (env.now, name, wait_time))
-            order_time = random.expovariate(1.0 / mean_order_time)
-            print('%7.4f %s: service time %6.3f' % (env.now, name, order_time))
-        
-            yield env.timeout(order_time)
-        
-            # Release the station
-            stations[0].release(req)
-            print('%7.4f %s: Finished ordering and left Station 1' % (env.now, name))
-            
-        elif(stations[1].count == 0):
-            req = stations[1].request()  
-            
-            yield req
-        
-            wait_time = env.now - arrival_time
-        
-            # Arrived at an ordering station
-            print('%7.4f %s arrived at Station 2 and waited %6.3f' % (env.now, name, wait_time))
-            order_time = random.expovariate(1.0 / mean_order_time)
-            print('%7.4f %s: service time %6.3f' % (env.now, name, order_time))
-        
-            yield env.timeout(order_time)
-        
-            # Release the station
-            stations[1].release(req)
-            end_order_time = env.now
-            print('%7.4f %s: Finished ordering and left Station 2' % (end_order_time, name))
-            
-        elif(station_1_waiting_to_order_count <= station_2_waiting_to_order_count):
-            req = stations[0].request()
-            
-            yield req
-        
-            wait_time = env.now - arrival_time
-        
-            # Arrived at an ordering station
-            print('%7.4f %s arrived at Station 1 and waited %6.3f' % (env.now, name, wait_time))
-            order_time = random.expovariate(1.0 / mean_order_time)
-            print('%7.4f %s: service time %6.3f' % (env.now, name, order_time))
-        
-            yield env.timeout(order_time)
-        
-            # Release the station
-            stations[0].release(req)
-            print('%7.4f %s: Finished ordering and left Station 1' % (env.now, name))
-        
-        else:
-            req = stations[1].request()  
-            
-            yield req
-        
-            wait_time = env.now - arrival_time
-        
-            # Arrived at an ordering station
-            print('%7.4f %s arrived at Station 2 and waited %6.3f' % (env.now, name, wait_time))
-            order_time = random.expovariate(1.0 / mean_order_time)
-            print('%7.4f %s: service time %6.3f' % (env.now, name, order_time))
-        
-            yield env.timeout(order_time)
-        
-            # Release the station
-            stations[1].release(req)
-            end_order_time = env.now
-            print('%7.4f %s: Finished ordering and left Station 2' % (end_order_time, name))
-    
-    else:
-        print('%7.4f %s: Balked' % (env.now, name)) 
-        
-    # Receiving Order
-    arrival_time = env.now
-    
-    pickup_line_count = window.count
-    pickup_line_waiting_count = len(window.queue)
-    
-    print("Window: paying: %4d waiting: %4d" % (pickup_line_count, pickup_line_waiting_count))
-    
-    if(pickup_line_waiting_count < max_number_of_pickup_window_spots):
-        req = window.request()
-        
-        yield req
-        
-        wait_time = env.now - arrival_time
-        
-        print("%7.4f %s arrived at pick-up window and waited %6.3f" % (env.now, name, wait_time))
-        
-        pay_time = random.expovariate(1.0 / mean_pay_time)
-        print("%7.4f %s: pay time %6.3f" % (env.now, name, pay_time))
-        
-        yield env.timeout(pay_time)
-        
-        window.release(req)
-        print("%7.4f %s: Finished paying and has left the window" % (env.now, name))
-
 # Setup and start the simulation
-print("Scenario 1: Two Service Stations")
-random.seed(random_seed)
-env = simpy.Environment() #Starts at t=0
+f = open("output.txt", "w")
+f.write('Scarnario 1\n')
+random.seed(RANDOM_SEED)
 
-# Start processes and run
-station_1 = simpy.Resource(env, 1)
-station_2 = simpy.Resource(env, 1)
-stations = [station_1, station_2]
-window = simpy.Resource(env, capacity=1)
-env.process(customer_generator(env, stations, mean_interarrival_time, operating_timespan))
-env.run() 
+# Create an environment and start the setup process
+env = simpy.Environment()
+env.process(setup(env))
+
+# Execute!
+env.run()
+
+# Sum Results for balked customers to the output file
+balked = 0
+for name in TOTAL_BALKED:
+    balked += 1
+f.write("Total customers balked in Scenario: %d\n" % balked)
+
+# Sum Results for served customers to output file
+served = 0
+for name in TOTAL_SERVED:
+    served +=1
+
+total_cust = served + balked
+
+f.write("Total customers served in Scenario: %d\n" % served)
+
+# Print Table of Variables Used
+f.write("\n\n| Variable | Value\n")
+for item in VAR_LIST:
+    f.write("| %s | %d \n"% (item[0], item[1]))
+
+# Graphic to display values from Scenario bar chart
+data = [served, balked, total_cust]
+x = np.arange(3)
+fig, ax = plt.subplots()
+plt.bar(x, data, color= ['blue', 'red', 'purple'])
+plt.xticks(x, ('Served', 'Balked', 'Total Customers'))
+plt.title("Scenario 1 Collected Data")
+plt.ylabel("Customers")
+plt.savefig('bar_chart.pdf')
+
+# Close file and exit
+f.close()
